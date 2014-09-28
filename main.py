@@ -1,18 +1,27 @@
 import asyncio
 
 from irc import IRCProtocol
+from irc.events import EventManager
+from irc.plugins import PluginManager
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger('octobot')
 
 class Bot(IRCProtocol):
+
+    def __init__(self, *args, **kwargs):
+        super(Bot, self).__init__(*args, **kwargs)
+        self.plugin_manager = PluginManager(['plugins'])
+        self.plugin_manager.load_plugins()
+        self.event_manager_thread = asyncio.async(EventManager.handleEvents())
 
     def connected(self):
         self.nick('Testing')
         self.user('Testing', 'Testing')
-        asyncio.async(self.delayed_join())
 
-    @asyncio.coroutine
-    def delayed_join(self):
-        yield from asyncio.sleep(2)
-        self.join('#test')
+    def _handle_rpl_welcome(self, prefix, args):
+        self.join("#test")
 
     def on_message(self, sender, target, message):
         if target.startswith('#'):
@@ -30,5 +39,6 @@ class Bot(IRCProtocol):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
+    loop.set_debug(True)
     bot = Bot.new(loop)
     loop.run_forever()

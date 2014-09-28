@@ -1,6 +1,7 @@
 import asyncio
 import re
 from .numerics import get_type
+from .events import fireEvent
 
 class IRCProtocol(asyncio.Protocol):
     """
@@ -90,7 +91,7 @@ class IRCProtocol(asyncio.Protocol):
         sender = self._parse_user(prefix)
         self.on_message(sender, target, message)
 
-
+        fireEvent("privmsg", sender=sender, target=target, message=message)
 
     ###
     # asyncio.Protocol functions

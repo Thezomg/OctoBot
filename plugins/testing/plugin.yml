@@ -1,0 +1,5 @@
+name: Test Plugin
+description: This is a test plugin
+author: Deaygo
+version: 1.0
+autoload: false
