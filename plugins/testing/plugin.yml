@@ -1,5 +1,7 @@
 name: Test Plugin
 description: This is a test plugin
 author: Deaygo
+requires:
+  - command
 version: 1.0
-autoload: false
+autoload: true

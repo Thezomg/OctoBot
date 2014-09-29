@@ -19,6 +19,7 @@ class _EventManager(object):
 	def handleEvents(self):
 		while True:
 			event, args = yield from self.__events.get()
+			logger.debug("Handling event {}".format(event))
 			for fn, expects in self.__registration[event[0]]:
 				fire = True
 				if len(event) - 1 != len(expects):
@@ -28,6 +29,7 @@ class _EventManager(object):
 					ex = expects[i]
 					if isinstance(ex, list):
 						if not any(ev == val.lower() for val in ex):
+							logger.error("Won't fire")
 							fire = False
 							break
 					else:
@@ -35,6 +37,7 @@ class _EventManager(object):
 							fire = False
 							break
 				if fire:
+					logger.debug("Firing event function: {} with {}".format(fn.__name__, args))
 					fn(event=event, **args)
 
 	def registerFunction(self, event, func):
@@ -53,7 +56,7 @@ class _EventManager(object):
 		self.__module_functions[mod].append(func)
 
 	@coroutine
-	def fireEvent(self, *event, **kwargs):
+	def fire_event(self, *event, **kwargs):
 		if event[0] in self.__registration:
 			yield from self.__events.put([event, kwargs])
 
@@ -78,6 +81,16 @@ def BindEvent(*event):
 		return func_wrapper
 	return decorator
 
-def fireEvent(*event, **kwargs):
+def bind_event(*event):
+	def decorator(func):
+		@wraps(func)
+		def func_wrapper(*args, **kwargs):
+			return func(*args, **kwargs)
+		if len(event) > 0:
+			func.__event__ = event
+		return func
+	return decorator
+
+def fire_event(*event, **kwargs):
 	logger.debug("Firing event {} with {}".format(event, kwargs))
-	async(EventManager.fireEvent(*event, **kwargs))
+	async(EventManager.fire_event(*event, **kwargs))

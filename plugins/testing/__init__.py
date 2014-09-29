@@ -1,5 +1,7 @@
-from irc.events import BindEvent, fireEvent
+from octobot.events import bind_event, fire_event
+from octobot.plugins import Plugin
 
-@BindEvent("privmsg")
-def testing(sender=None, target=None, message=None, *, event=None):
-    print(target, sender, message)
+class TestingPlugin(Plugin):
+    @bind_event("command", "test")
+    def testing(self, sender=None, target=None, args=None, *, event=None):
+        print("got a test command!", target, sender, args)

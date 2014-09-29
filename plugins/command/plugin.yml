@@ -1,0 +1,7 @@
+name: Command
+description: Command Plugin
+author: Deaygo
+provides:
+  - command
+version: 1.0
+autoload: false

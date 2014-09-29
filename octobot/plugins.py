@@ -3,11 +3,21 @@ import os.path
 import yaml
 
 import importlib
-
+import inspect
 import logging
 logger = logging.getLogger('octobot:PluginManager')
 
+from .utils import topological_sort
+from .events import EventManager
+
 class Plugin(object):
+    """
+    Base Plugin Object
+    """
+    def register(self):
+        pass
+
+class _Plugin(object):
 
     def __init__(self, loader, path):
         self.loader = loader
@@ -40,10 +50,30 @@ class Plugin(object):
                 logger.info("Module already loaded, unregistering events")
                 EventManager.unregisterModuleFunctions(self.module)
             self.module = self.loader.load_module()
+            classes = inspect.getmembers(self.module, inspect.isclass)
+            self.plugin = None
+            for n, cls in classes:
+                if issubclass(cls, Plugin) and not cls is Plugin:
+                    self.plugin = cls
+            if self.plugin is None:
+                logger.error("Failed to load module {} from {}, no Plugin class found".format(self.name, self.path))
+                return False
             self.loaded = True
+            self.plugin = self.plugin()
+            logger.debug('Instaniated {}'.format(self.name))
+            methods = inspect.getmembers(self.plugin, predicate=inspect.ismethod)
+            for _, f in methods:
+                if getattr(f, '__wrapped__', None) is not None:
+                    fn = inspect.unwrap(f)
+                else:
+                    fn = f
+                event = getattr(fn, '__event__', None)
+                if event is not None:
+                    logger.debug('Registering {} for {}'.format(fn.__name__, event))
+                    EventManager.registerFunction(event, fn)
             return True
-        except ImportError:
-            logger.error("Failed to load module {} from {}".format(self.name, self.path))
+        except ImportError as exc:
+            logger.error("Failed to load module {} from {}: {}".format(self.name, self.path, str(exc)))
             return False
 
 class PluginManager(object):
@@ -51,9 +81,11 @@ class PluginManager(object):
         self.plugin_paths = paths
         self.plugins = []
         self.providers = {}
+        self.required = []
 
-    def load_plugins(self):
+    def find_plugins(self):
         items = []
+        deps = {}
         for path in self.plugin_paths:
             for i in listdir(path):
                 p = os.path.join(path, i)
@@ -63,33 +95,48 @@ class PluginManager(object):
         for i in items:
             p = os.path.join(i, 'plugin.yml')
             if os.path.exists(p):
-                logger.debug("loading {} from {}".format(os.path.basename(i), os.path.dirname(i)))
+                logger.debug("loading {} definition from {}".format(os.path.basename(i), os.path.dirname(i)))
                 loader = importlib.find_loader('{}'.format(os.path.basename(i)), [os.path.dirname(i)])
 
                 try:
-                    plugin = Plugin(loader, i)
+                    plugin = _Plugin(loader, i)
                     if plugin.disabled:
                         continue
                 except PluginException as exc:
                     logger.error("Failed to load plugin: {}".format(str(exc)))
                     continue
 
-                for i in plugin.provides:
-                    if not i in self.providers:
-                        self.providers[i] = []
-                    self.providers[i].append(plugin)
-
-                logger.info("Checking if plugins required")
-
-                if plugin.autoload and self.haveRequired(plugin):
-                    self.enableRequired(plugin)
-                    self.set_to_load(plugin, additional="set to autoload in configuration")
-
                 self.plugins.append(plugin)
 
-        for p in self.plugins:
-            if p.should_load:
-                p.load()
+                if len(plugin.provides) == 0:
+                    plugin.provides.append(os.path.basename(i))
+
+                self.required.extend(plugin.requires)
+
+                for r in plugin.provides:
+                    if not r in self.providers:
+                        self.providers[r] = []
+                    if not plugin in self.providers[r]:
+                        self.providers[r].append(plugin)
+                    if not r in deps:
+                        deps[r] = []
+                    deps[r].extend(plugin.requires)
+
+        for i in list(topological_sort(deps)):
+            for p in self.providers[i]:
+                req = set(self.required)
+                if p.autoload or req.issuperset(set(p.provides)):
+                    if not self.has_providers(p) or not p.load():
+                        print("{} failed to load or doesn't have required providers".format(p.name))
+                        for i in p.provides:
+                            self.providers[i].remove(p)
+
+
+    def has_providers(self, plugin):
+        for r in plugin.requires:
+            if len(self.providers[r]) == 0:
+                return False
+        return True
 
     def set_to_load(self, *plugins, additional=None):
         for plugin in plugins:
