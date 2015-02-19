@@ -1,2 +1,4 @@
 asyncio==3.4.1
 pyyaml
+cython
+aiohttp
