@@ -61,16 +61,7 @@ class _Plugin(object):
             self.loaded = True
             self.plugin = self.plugin()
             logger.debug('Instaniated {}'.format(self.name))
-            methods = inspect.getmembers(self.plugin, predicate=inspect.ismethod)
-            for _, f in methods:
-                if getattr(f, '__wrapped__', None) is not None:
-                    fn = inspect.unwrap(f)
-                else:
-                    fn = f
-                event = getattr(fn, '__event__', None)
-                if event is not None:
-                    logger.debug('Registering {} for {}'.format(fn.__name__, event))
-                    EventManager.registerFunction(event, fn)
+            EventManager.register_class(self.plugin)
             return True
         except ImportError as exc:
             logger.error("Failed to load module {} from {}: {}".format(self.name, self.path, str(exc)))

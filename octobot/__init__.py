@@ -1,7 +1,7 @@
 import asyncio
 
 from octoirc import IRCProtocol
-from .events import EventManager, fire_event
+from .events import EventManager, fire_event, bind_event
 from .plugins import PluginManager
 import logging
 
@@ -15,6 +15,8 @@ class Bot(IRCProtocol):
         self.plugin_manager = PluginManager(['plugins'])
         self.plugin_manager.find_plugins()
         self.event_manager_thread = asyncio.async(EventManager.handleEvents())
+        asyncio.async(fire_event("plugin_load"))
+        EventManager.register_class(self)
 
     def connected(self):
         self.nick('Testing')
@@ -23,15 +25,13 @@ class Bot(IRCProtocol):
     def _handle_rpl_welcome(self, prefix, args):
         self.join("#test")
 
+    @bind_event('bot', 'privmsg')
+    def send_privmsg(self, target=None, message=None, *, event=None):
+        self.message(target, message)
+
+    @asyncio.coroutine
     def on_message(self, sender, target, message):
-        fire_event("privmsg", sender=sender, target=target, message=message)
-        #if target.startswith('#'):
-        #    self.message(target, message[::-1])
-        #else:
-        #    if message.startswith('join'):
-        #        self.join(message.split(' ')[1])
-        #        self.message(sender[0], 'Joining...')
-        #    self.message(sender[0], message[::-1])
+        yield from fire_event("privmsg", sender=sender, target=target, message=message)
 
     @classmethod
     def new(cls, loop, host, port):

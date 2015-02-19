@@ -28,6 +28,7 @@ class IRCProtocol(asyncio.Protocol):
     def connected(self):
         pass
 
+    @asyncio.coroutine
     def on_message(self, sender, target, message):
         pass
 
@@ -88,7 +89,7 @@ class IRCProtocol(asyncio.Protocol):
     def _handle_privmsg(self, prefix, args):
         target, message = args
         sender = self._parse_user(prefix)
-        self.on_message(sender, target, message)
+        asyncio.async(self.on_message(sender, target, message))
 
     ###
     # asyncio.Protocol functions

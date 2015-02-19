@@ -11,14 +11,14 @@ class CommandPlugin(Plugin):
         print("command plugin")
         if message.startswith(','):
             command, *args = message[1:].split(' ')
-            fire_event('command', command, sender=sender, target=target, args=args)
+            yield from fire_event('command', command, sender=sender, target=target, args=args)
 
     @bind_event("command", "help")
     def on_cmd_help(self, sender=None, target=None, args=None, *, event=None):
         if len(args) > 0:
             if args[0].lower() in self.__commands:
                 c = self.__commands[args[0].lower()]
-                print("{}: {}, {}".format(args[0].lower(), *c[0]))
+                print("{}: {}, {}".format(args[0].lower(), *c))
             else:
                 print("Help not provided for that command")
         pass # handle help message
@@ -26,4 +26,4 @@ class CommandPlugin(Plugin):
     @bind_event("command-register")
     def on_command_register(self, command, description, helpmsg, *, event=None):
         self.__commands[command.lower()] = (description, helpmsg,)
-        pass
+
