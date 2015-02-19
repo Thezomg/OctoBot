@@ -1,4 +1,4 @@
+Cython==0.22
+PyYAML==3.11
+aiohttp==0.14.4
 asyncio==3.4.1
-pyyaml
-cython
-aiohttp
