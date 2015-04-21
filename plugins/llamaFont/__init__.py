@@ -3,16 +3,16 @@ from octobot.plugins import Plugin
 
 import re
 from os.path import isfile
-import json
-from urllib.parse import urlencode
-from urllib.request import urlopen
-import base64
-from io import BytesIO
+import os
+from tempfile import mkstemp
 
 from PIL import Image
 
+from imgurpython import ImgurClient
 
-class TestingPlugin(Plugin):
+from imgurconfig import CLIENT_ID, CLIENT_SECRET
+
+class ImgurPlugin(Plugin):
     def __init__(self):
         self.llamaHandler = LlamaHandler()
 
@@ -22,7 +22,6 @@ class TestingPlugin(Plugin):
 
     @bind_event("command", "llamafy")
     def llamafy(self, sender=None, target=None, args=None, *, event=None):
-        print ("entering llama land")
         message = ' '.join(args)
         message = re.sub(r"[^A-Za-z\!\?\. ]", '', message).lower()
 
@@ -35,65 +34,17 @@ class TestingPlugin(Plugin):
             llamaURL = self.llamaHandler.llamaItUp(message)
             reply = "%s: %s" % (sender[0], llamaURL)
         else:
-            reply = sendingNick + ": Sorry, only letters, full stops, exclamation marks and question marks can be llamafied"
-
-        print ("reply:{}".format(reply))
+            reply = sender[0] + ": Sorry, only letters, full stops, exclamation marks and question marks can be llamafied"
 
         yield from fire_event('bot', 'privmsg', target=t, message=reply)
-
-
-class Imgur():
-    def __init__(self, apiKey):
-        self.API_KEY = apiKey
-        self.API_URL = "http://api.imgur.com/2/"
-    
-    def upload(self, image, title):
-        imageAsFile = BytesIO()
-        image.save(imageAsFile, "PNG")
-        
-        callData = urlencode({
-                            "key"  :self.API_KEY,
-                            "image":base64.b64encode(imageAsFile.getvalue()),
-                            "title": title
-                             })
-        callData = callData.encode('utf-8')
-        
-        reply = urlopen(self.API_URL+"upload.json", callData).readall().decode('utf-8')
-        if reply:
-            return json.loads(reply)
-        else:
-            return None
-
-    def stats(self, timePeriod = "month"):
-        callData = urlencode({"view": timePeriod})
-        reply = urlopen(self.API_URL+"stats.json?"+callData).readall().decode('utf-8')
-        if reply:
-            return json.loads(reply)
-        else:
-            return None
-
-    def imageInfo(self, hash):
-        reply = urlopen(self.API_URL+"image/"+hash+".json").readall().decode('utf-8')
-        if reply:
-            return json.loads(reply)
-        else:
-            return None
-
-    def imageDelete(self, hash):
-        reply = urlopen(self.API_URL+"delete/"+hash+".json").readall().decode('utf-8')
-        if reply:
-            return json.loads(reply)        
-        else:
-            return None
-
-
 
 class LlamaHandler():
     def __init__(self):
         self.llama = LlamaText()
         self.previousWords = dict()
         self.wordsFileName = "plugins/llamaFont/previousWords.list"
-        self.imgurAPIKey = "ADD ONE"
+        self.imgurClientID = CLIENT_ID
+        self.imgurClientSecret = CLIENT_SECRET
 
         if isfile(self.wordsFileName):
             previousWordsFile = open(self.wordsFileName, 'r')
@@ -106,8 +57,9 @@ class LlamaHandler():
                 
             previousWordsFile.close()
 
-        self.imgur = Imgur(self.imgurAPIKey)
-            
+        self.imgur = ImgurClient(self.imgurClientID, self.imgurClientSecret)
+
+
     def llamaItUp(self, word):
         word = re.sub(r"[^A-Za-z\!\?\. ]", '', word).lower()
         
@@ -115,27 +67,32 @@ class LlamaHandler():
             return self.previousWords[word]["url"]
         else:
             llamaImage = self.llama.new(word)
-            imageInfo = self.imgur.upload(llamaImage, word)
+            _, tmpPath = mkstemp('.png')
+            tmpImg = open(tmpPath, 'wb')
+            llamaImage.save(tmpImg, "PNG")
+            tmpImg.close()
+            imageInfo = self.imgur.upload_from_path(tmpPath, {'title': word})
             self.storeWord(word, imageInfo)
-            return imageInfo["upload"]["links"]["original"]
+            os.remove(tmpPath)
+            return imageInfo['link']
         
     def storeWord(self, word, imageInfo):
         if not word in self.previousWords:
             self.previousWords[word] = {
-                                        "url": imageInfo["upload"]["links"]["original"],
-                                        "deleteHash": imageInfo["upload"]["image"]["deletehash"]
+                                        "url": imageInfo['link'],
+                                        "deleteHash": imageInfo['deletehash']
                                         }
         
             previousWordsFile = open(self.wordsFileName, 'a')
-            previousWordsFile.write("%s;%s;%s\n" % (word, imageInfo["upload"]["links"]["original"],
-                                    imageInfo["upload"]["image"]["deletehash"]))
+            previousWordsFile.write("%s;%s;%s\n" % (word, imageInfo["link"],
+                                    imageInfo["deletehash"]))
             previousWordsFile.close()
 
 
 class LlamaText():
     def __init__(self):
         self.letterHeight = 90        
-        baseImage = Image.open("plugins/llamas/letterSprites.png")
+        baseImage = Image.open("plugins/llamaFont/letterSprites.png")
 
         self.characters = {
             "a" : baseImage.crop((0, 0, 63, 90)),
