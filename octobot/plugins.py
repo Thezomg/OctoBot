@@ -1,6 +1,7 @@
 from os import listdir
 import os.path
 import yaml
+import sys
 
 import importlib
 import inspect
@@ -49,7 +50,9 @@ class _Plugin(object):
             if self.loaded == True and self.module:
                 logger.info("Module already loaded, unregistering events")
                 EventManager.unregisterModuleFunctions(self.module)
+            sys.path.insert(1, self.path)
             self.module = self.loader.load_module()
+            sys.path.remove(self.path)
             classes = inspect.getmembers(self.module, inspect.isclass)
             self.plugin = None
             for n, cls in classes:
