@@ -1,0 +1,7 @@
+name: Llama font
+description: Makes llama font pictures
+author: 42
+requires:
+  - command
+version: 1.0
+autoload: true
